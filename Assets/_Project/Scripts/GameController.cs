@@ -26,9 +26,9 @@ namespace spintap
     	}
 
         #region SCORE/GAME CONTROLLER
-        public void updateScore()
+        public void updateScore(int bonus)
         {
-            score += 10;
+            score += bonus + 10;
             scoreText.SetText(score.ToString());
         }
 

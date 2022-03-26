@@ -17,10 +17,14 @@ namespace spintap
         public float rotationSpeed;
         private bool isRotatingRight = false;
 
-        private float TRIGGER_GRACE_BUFFER = 1f;
+        private float TRIGGER_GRACE_BUFFER = .05f;
         private float triggerGraceTimer;
-        private float triggerExitTime;
+        private float triggerExitGraceTimer;
         private bool inGracePeriod = false;
+        private bool inExitGracePeriod = false;
+        private bool playerInput = false;
+
+        private int PERFECT_HIT_BONUS = 20;
 
         void Awake()
     	{
@@ -30,65 +34,98 @@ namespace spintap
 
         void Update()
         {            
-            // if(Input.anyKeyDown && !inGracePeriod)
-            // {
-            //     if(inTrigger)
-            //     {
-            //         hit = true;
-            //         if(coin != null)
-            //         {
-            //             addCoin();
-            //         }
-            //     }
-            //     else {
-            //         triggerGraceTimer = TRIGGER_GRACE_BUFFER;
-            //         inGracePeriod = true;
-            //     }
-            // }
-            // else if(triggerGraceTimer > 0f)
-            // {
-            //     triggerGraceTimer -= Time.deltaTime;
-            // }
-
-            // if(inTrigger && inGracePeriod && triggerGraceTimer > 0f)
-            // {
-            //     hit = true;
-            //     if(coin != null)
-            //     {
-            //         addCoin();
-            //     }
-            // }
-            // else
-            // {
-            //     Time.timeScale = 0f;
-            // }
-
-            if(inTrigger)
+            // Checks for player input.
+            if(Input.GetKeyDown(KeyCode.B))
             {
-                if(Input.anyKeyDown || inGracePeriod)
+                playerInput = true;
+            }
+
+            #region GRACE PERIOD MANAGEMENT
+            if(inExitGracePeriod && !inGracePeriod)
+            {
+                triggerExitGraceTimer -= Time.deltaTime;
+
+                if(playerInput)
                 {
                     hit = true;
-                    if(coin != null)
-                    {
-                        addCoin();
-                        controllerScript.updateScore();
-                    }
-                    inGracePeriod = false;
+                    updateGame();
+                }
+                else if(triggerExitGraceTimer < 0f)
+                {
+                    inExitGracePeriod = false;
+                    controllerScript.endGame();
                 }
             }
-            else if(Input.anyKeyDown)
+
+            if(inGracePeriod && !inExitGracePeriod) // controls the grace period timer. Checks for collision whenever the timer is > 0.
             {
-                controllerScript.endGame();
+                triggerGraceTimer -= Time.deltaTime;
+
+                if(triggerGraceTimer > 0f)
+                {
+                    checkCollision();
+                }
+                else
+                {
+                    inGracePeriod = false;
+                    controllerScript.endGame();
+                }
+            }
+            #endregion
+
+            // If the player made an input execute
+            if(playerInput)
+            {
+                checkCollision(); // This only runs once for an immediate check if the pointer is in the trigger.
             }
 
             setRotation();
         }
 
+        // Checks if the player's pointer is in the trigger. 
+        // If so, reset values and continue the game.
+        // If not, and the player is not in a grace period, start the timer for the grace period.
+        private void checkCollision()
+        {
+            if(inTrigger)
+            {
+                hit = true;
+                updateGame();
+            }
+            else if(!inGracePeriod)
+            {
+                inGracePeriod = true;
+                playerInput = false;
+                triggerGraceTimer = TRIGGER_GRACE_BUFFER;
+            }
+        }
+
+        private void updateGame()
+        {
+            addCoin();
+            changeDirection();
+
+            if(!inExitGracePeriod && !inGracePeriod) // If no grace period was used, grant player a bonus for a perfect hit
+                controllerScript.updateScore(PERFECT_HIT_BONUS);
+            else // If the player was in a grace period, grant no bonus.
+                controllerScript.updateScore(0);
+
+            // resets values
+            hit = false;
+            playerInput = false;
+            inGracePeriod = false;
+            inExitGracePeriod = false;
+            triggerGraceTimer = -1f;
+            triggerExitGraceTimer = -1f;
+        }
+
+        // Rotates the pointer around the pivot point.
         private void setRotation()
         {
             transform.RotateAround(pivotObject.transform.position, new Vector3(0, 0, direction), rotationSpeed * Time.deltaTime);
         }
 
+        // Changes the direction of rotation
         private void changeDirection()
         {
             if(!isRotatingRight)
@@ -104,12 +141,11 @@ namespace spintap
             rotationSpeed += 5f;
         }
 
+        // Destroys the current coin and adds another one.
         private void addCoin()
         {
             coin.GetComponent<CoinController>().destroyCoin();
             controllerScript.spawnCoin();
-            
-            changeDirection();
         }
 
         void OnTriggerEnter2D(Collider2D col)
@@ -121,11 +157,12 @@ namespace spintap
         void OnTriggerExit2D(Collider2D col)
         {
             inTrigger = false;
+
             if(!hit)
             {
-                controllerScript.endGame();
+                inExitGracePeriod = true;
+                triggerExitGraceTimer = TRIGGER_GRACE_BUFFER;
             }
-            hit = false;
         }
     }
 }
